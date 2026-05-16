@@ -1,12 +1,17 @@
-import argparse
 import os
-import sys
 from typing import List, Tuple
 
 import cv2
 import numpy as np
 from ultralytics import YOLO
 
+# ================== 配置区（可在 PyCharm 直接修改） ==================
+IMAGE_PATH = 'test_screenshot.png'   # 截图路径
+WEIGHTS_PATH = 'best.pt'             # YOLO 权重路径
+CONFIDENCE = 0.25                    # 置信度阈值
+IOU = 0.45                           # NMS IoU 阈值
+SAVE_OVERLAY_PATH = 'board_overlay.png'  # 可视化输出路径
+# ====================================================================
 
 CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 EMPTY_VALUE = 6
@@ -19,13 +24,7 @@ def detections_to_board(
     grid_size: int = GRID_SIZE,
     empty_value: int = EMPTY_VALUE,
 ) -> Tuple[List[List[int]], List[Tuple[int, int, int, int]]]:
-    """
-    Convert YOLO normalized boxes/classes to NxN board.
-
-    Returns:
-        board: grid_size x grid_size matrix
-        conflicts: list of (row, col, old_cls, new_cls)
-    """
+    """Convert YOLO normalized boxes/classes to NxN board."""
     board = [[empty_value for _ in range(grid_size)] for _ in range(grid_size)]
     conflicts = []
 
@@ -52,14 +51,12 @@ def draw_overlay(image: np.ndarray, board: List[List[int]], save_path: str) -> N
     h, w = image.shape[:2]
     out = image.copy()
 
-    # Draw grid
     for i in range(1, GRID_SIZE):
         x = int(i * w / GRID_SIZE)
         y = int(i * h / GRID_SIZE)
         cv2.line(out, (x, 0), (x, h), (0, 255, 255), 1)
         cv2.line(out, (0, y), (w, y), (0, 255, 255), 1)
 
-    # Put board values at cell centers
     cell_w = w / GRID_SIZE
     cell_h = h / GRID_SIZE
     for r in range(GRID_SIZE):
@@ -75,42 +72,35 @@ def draw_overlay(image: np.ndarray, board: List[List[int]], save_path: str) -> N
     print(f'\n✓ 已保存可视化结果: {save_path}')
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description='Use YOLO best.pt to detect pieces and build a 9x9 board.')
-    parser.add_argument('--image', required=True, help='Input screenshot path')
-    parser.add_argument('--weights', default='best.pt', help='YOLO model path (default: best.pt)')
-    parser.add_argument('--conf', type=float, default=0.25, help='Confidence threshold')
-    parser.add_argument('--iou', type=float, default=0.45, help='NMS IoU threshold')
-    parser.add_argument('--save-overlay', default='board_overlay.png', help='Overlay output image path')
-    args = parser.parse_args()
+def run(
+    image_path: str = IMAGE_PATH,
+    weights_path: str = WEIGHTS_PATH,
+    conf: float = CONFIDENCE,
+    iou: float = IOU,
+    save_overlay_path: str = SAVE_OVERLAY_PATH,
+) -> List[List[int]]:
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f'输入图片不存在: {image_path}')
+    if not os.path.exists(weights_path):
+        raise FileNotFoundError(f'模型文件不存在: {weights_path}')
 
-    if not os.path.exists(args.image):
-        print(f'❌ 输入图片不存在: {args.image}')
-        sys.exit(1)
-    if not os.path.exists(args.weights):
-        print(f'❌ 模型文件不存在: {args.weights}')
-        sys.exit(1)
-
-    model = YOLO(args.weights)
-    results = model.predict(source=args.image, conf=args.conf, iou=args.iou, verbose=False)
-
+    model = YOLO(weights_path)
+    results = model.predict(source=image_path, conf=conf, iou=iou, verbose=False)
     if not results:
-        print('❌ 模型没有返回结果')
-        sys.exit(1)
+        raise RuntimeError('模型没有返回结果')
 
     result = results[0]
     if result.boxes is None or len(result.boxes) == 0:
         board = [[EMPTY_VALUE for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
         print('⚠️ 没有检测到棋子，返回全空棋盘。')
         print_board(board)
-        return
+        return board
 
     boxes_xywhn = result.boxes.xywhn.cpu().numpy()
     classes = result.boxes.cls.cpu().numpy()
 
     board, conflicts = detections_to_board(boxes_xywhn, classes)
 
-    # Basic class-id validation
     invalid = sorted({int(c) for c in classes if int(c) < 0 or int(c) >= len(CLASS_NAMES)})
     if invalid:
         print(f'⚠️ 发现未知类别ID: {invalid}（预期 0~5）')
@@ -122,10 +112,16 @@ def main() -> None:
         for row, col, old_cls, new_cls in conflicts:
             print(f'  - cell({row},{col}): {old_cls} -> {new_cls}')
 
-    image = cv2.imread(args.image)
+    image = cv2.imread(image_path)
     if image is not None:
-        draw_overlay(image, board, args.save_overlay)
+        draw_overlay(image, board, save_overlay_path)
+
+    return board
 
 
 if __name__ == '__main__':
-    main()
+    print('在 PyCharm 直接运行：请先在脚本顶部配置 IMAGE_PATH 和 WEIGHTS_PATH。')
+    try:
+        run()
+    except Exception as exc:
+        print(f'❌ 运行失败: {exc}')
