@@ -157,18 +157,28 @@ def map_detections_to_8x8(result, img_w: int, img_h: int, x0: int, x1: int, y0: 
         row = int((cy - y0) / max(1e-6, (y1 - y0)) * GRID_SIZE)
         col = min(GRID_SIZE - 1, max(0, col))
         row = min(GRID_SIZE - 1, max(0, row))
-        pieces.append((row, col, int(cls), float(conf)))
+        pieces.append((row, col, int(cls), float(conf), int(cx), int(cy)))
     return sorted(pieces, key=lambda x: (x[0], x[1], -x[3]))
 
 
 def build_board_array(pieces, empty_value=-1):
     board = [[empty_value for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
-    for row, col, cls_i, _conf in pieces:
+    for row, col, cls_i, _conf, _cx, _cy in pieces:
         if board[row][col] == empty_value:
             board[row][col] = cls_i
     return board
 
 
+
+
+def build_cell_center_map(pieces):
+    """Use YOLO piece centers as physical cell centers to reduce grid-fit drift."""
+    cell_points = {}
+    for row, col, _cls, conf, cx, cy in pieces:
+        key = (row, col)
+        if key not in cell_points or conf > cell_points[key][0]:
+            cell_points[key] = (conf, cx, cy)
+    return {k: (v[1], v[2]) for k, v in cell_points.items()}
 
 def print_board_pretty(board: List[List[int]]) -> None:
     print('8x8棋盘视图（空位=-1）:')
@@ -248,6 +258,7 @@ def run_once(step_idx: int = 0):
 
     print(f"YOLO model mode: {'eval' if hasattr(yolo, 'model') and (not yolo.model.training) else 'train'} (inference-only)")
     pieces = map_detections_to_8x8(results[0], w, h, x0, x1, y0, y1)
+    cell_center_map = build_cell_center_map(pieces)
     board = build_board_array(pieces, -1)
     print(f'\n===== 实际操作 Step {step_idx} =====')
     print('8x8棋盘整数数组:')
@@ -279,21 +290,29 @@ def run_once(step_idx: int = 0):
         print('⚠️ RL 动作包含空位，取消执行 adb 移动')
         return
 
-    sx, sy = cell_center(x0, x1, y0, y1, r1, c1)
+    # 优先使用 YOLO 实际检测到的格子中心（更贴近真实棋子位置）
+    if (r1, c1) in cell_center_map:
+        sx, sy = cell_center_map[(r1, c1)]
+    else:
+        sx, sy = cell_center(x0, x1, y0, y1, r1, c1)
 
-    # 关键修复：按“动作方向”构造终点，避免由于网格拟合误差导致方向跑偏
-    cell_w = max(1.0, (x1 - x0) / GRID_SIZE)
-    cell_h = max(1.0, (y1 - y0) / GRID_SIZE)
-    dx = c2 - c1
-    dy = r2 - r1
-    tx = int(sx + dx * cell_w * 0.8)
-    ty = int(sy + dy * cell_h * 0.8)
+    if (r2, c2) in cell_center_map:
+        tx, ty = cell_center_map[(r2, c2)]
+    else:
+        # 回退：按动作方向构造终点
+        cell_w = max(1.0, (x1 - x0) / GRID_SIZE)
+        cell_h = max(1.0, (y1 - y0) / GRID_SIZE)
+        dx = c2 - c1
+        dy = r2 - r1
+        tx = int(sx + dx * cell_w * 0.8)
+        ty = int(sy + dy * cell_h * 0.8)
 
     dev_w, dev_h = get_device_screen_size()
     dsx, dsy = map_img_to_device(sx, sy, w, h, dev_w, dev_h)
     dtx, dty = map_img_to_device(tx, ty, w, h, dev_w, dev_h)
 
-    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dy}, dc={dx})')
+    dr, dc = (r2 - r1), (c2 - c1)
+    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dr}, dc={dc})')
     print(f'adb swipe(dev): ({dsx},{dsy}) -> ({dtx},{dty}) | wm={dev_w}x{dev_h}')
     adb_swipe(dsx, dsy, dtx, dty)
     print('✅ 已发送 adb 移动命令')
