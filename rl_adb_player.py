@@ -169,6 +169,16 @@ def build_board_array(pieces, empty_value=-1):
     return board
 
 
+
+def print_board_pretty(board: List[List[int]]) -> None:
+    print('8x8棋盘视图（空位=-1）:')
+    header = '    ' + ' '.join([f'{c:>3}' for c in range(GRID_SIZE)])
+    print(header)
+    print('    ' + '---' * GRID_SIZE)
+    for r, row in enumerate(board):
+        row_str = ' '.join([f'{v:>3}' for v in row])
+        print(f'{r:>2} | {row_str}')
+
 def cell_center(x0, x1, y0, y1, row, col):
     cw = (x1 - x0) / GRID_SIZE
     ch = (y1 - y0) / GRID_SIZE
@@ -218,6 +228,7 @@ def run_once(step_idx: int = 0):
     print(f'\n===== 实际操作 Step {step_idx} =====')
     print('8x8棋盘整数数组:')
     print(board)
+    print_board_pretty(board)
 
     obs = board_to_onehot(board)  # (7,8,8)
     model = ActorCritic(board_size=8, n_channels=7, n_actions=112)
