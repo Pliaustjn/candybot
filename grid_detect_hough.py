@@ -9,7 +9,7 @@ import numpy as np
 PHONE_IP = '192.168.2.16:5555'
 TEMP_IMAGE = 'temp_screen.png'
 OUTPUT_IMAGE = 'grid_hough_overlay.png'
-GRID_SIZE = 9
+GRID_SIZE = 8
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -82,31 +82,32 @@ def detect_grid_lines(image: np.ndarray) -> Tuple[List[int], List[int], np.ndarr
     return x_lines, y_lines, edges
 
 
-def _fit_to_10_lines(raw_lines: List[int], size: int) -> List[int]:
-    if len(raw_lines) >= 10:
-        idx = np.linspace(0, len(raw_lines) - 1, 10)
+def _fit_to_grid_lines(raw_lines: List[int], size: int, grid_size: int = GRID_SIZE) -> List[int]:
+    target = grid_size + 1
+    if len(raw_lines) >= target:
+        idx = np.linspace(0, len(raw_lines) - 1, target)
         return [int(raw_lines[int(i)]) for i in idx]
     if len(raw_lines) >= 2:
-        return [int(v) for v in np.linspace(raw_lines[0], raw_lines[-1], 10)]
-    return [int(v) for v in np.linspace(int(size * 0.15), int(size * 0.85), 10)]
+        return [int(v) for v in np.linspace(raw_lines[0], raw_lines[-1], target)]
+    return [int(v) for v in np.linspace(int(size * 0.15), int(size * 0.85), target)]
 
 
 def draw_grid_overlay(image: np.ndarray, x_lines: List[int], y_lines: List[int]) -> np.ndarray:
     out = image.copy()
     h, w = out.shape[:2]
 
-    x10 = _fit_to_10_lines(x_lines, w)
-    y10 = _fit_to_10_lines(y_lines, h)
+    x_grid = _fit_to_grid_lines(x_lines, w, GRID_SIZE)
+    y_grid = _fit_to_grid_lines(y_lines, h, GRID_SIZE)
 
-    for x in x10:
+    for x in x_grid:
         cv2.line(out, (x, 0), (x, h - 1), (0, 255, 255), 2)
-    for y in y10:
+    for y in y_grid:
         cv2.line(out, (0, y), (w - 1, y), (0, 255, 255), 2)
 
     for r in range(GRID_SIZE):
         for c in range(GRID_SIZE):
-            cx = int((x10[c] + x10[c + 1]) / 2)
-            cy = int((y10[r] + y10[r + 1]) / 2)
+            cx = int((x_grid[c] + x_grid[c + 1]) / 2)
+            cy = int((y_grid[r] + y_grid[r + 1]) / 2)
             cv2.putText(out, f'{r},{c}', (cx - 18, cy + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
 
     return out
