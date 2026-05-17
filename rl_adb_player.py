@@ -20,9 +20,13 @@ CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 
 # adb 滑动时长（毫秒）
 SWIPE_MS = 120
-MOVE_INTERVAL_SEC = 0.8
+MOVE_INTERVAL_SEC = 1.2
 MAX_MOVES = 30
 TOTAL_REALTIME_SCORE = 0
+REPEAT_ACTION_LIMIT = 2
+LAST_BOARD_KEY = None
+LAST_ACTION = None
+REPEAT_COUNT = 0
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -249,7 +253,7 @@ def adb_swipe(x1, y1, x2, y2):
 
 
 def run_once(step_idx: int = 0):
-    global TOTAL_REALTIME_SCORE
+    global TOTAL_REALTIME_SCORE, LAST_BOARD_KEY, LAST_ACTION, REPEAT_COUNT
     if not os.path.exists(WEIGHTS_PATH) or not os.path.exists(RL_MODEL_PATH):
         print('❌ 缺少 best.pt 或 candy_crush_model.pth')
         return
@@ -301,7 +305,34 @@ def run_once(step_idx: int = 0):
 
     with torch.inference_mode():
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
-        action = int(torch.argmax(probs, dim=1).item())
+        prob_vec = probs.squeeze(0).cpu().numpy()
+        action = int(np.argmax(prob_vec))
+
+    board_key = tuple(tuple(r) for r in board)
+    if board_key == LAST_BOARD_KEY and action == LAST_ACTION:
+        REPEAT_COUNT += 1
+    else:
+        REPEAT_COUNT = 0
+
+    # 连续重复同一动作时，尝试次优动作，避免卡死循环
+    if REPEAT_COUNT >= REPEAT_ACTION_LIMIT:
+        ranked = np.argsort(-prob_vec)
+        swapped = False
+        for cand in ranked:
+            cand = int(cand)
+            if cand == action:
+                continue
+            (cr1, cc1), (cr2, cc2) = decode_action(cand, GRID_SIZE)
+            if board[cr1][cc1] != -1 and board[cr2][cc2] != -1:
+                print(f'⚠️ 检测到重复动作，改用次优动作: {cand}')
+                action = cand
+                swapped = True
+                break
+        if not swapped:
+            print('⚠️ 检测到重复动作，但未找到可替代动作')
+
+    LAST_BOARD_KEY = board_key
+    LAST_ACTION = action
 
     rl_mode = 'eval' if not model.training else 'train'
     print(f'RL model mode: {rl_mode} (decision-only)')
