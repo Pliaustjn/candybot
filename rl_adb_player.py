@@ -234,7 +234,8 @@ def run_once(step_idx: int = 0):
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
         action = int(torch.argmax(probs, dim=1).item())
 
-    print(f'RL model mode: {'eval' if not model.training else 'train'} (decision-only)')
+    rl_mode = 'eval' if not model.training else 'train'
+    print(f'RL model mode: {rl_mode} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
     print(f'RL 动作: {action}, swap ({r1},{c1}) <-> ({r2},{c2})')
 
