@@ -120,10 +120,9 @@ def _middle_bounds(lines: List[int], size: int) -> Tuple[int, int]:
 def _middle_bounds_y(lines: List[int], size: int) -> Tuple[int, int]:
     arr = np.array(sorted(lines), dtype=float)
     if arr.size >= 6:
-        # 按你的反馈：上面多两部分、下面多一部分
-        # 直接去掉最上面2条、最下面1条再取边界
-        low = int(arr[2])
-        high = int(arr[-2])
+        # 按你的要求：横线y坐标只要第5个和第6个（从1开始计数）
+        low = int(arr[4])
+        high = int(arr[5])
     else:
         low, high = _middle_bounds(lines, size)
 
