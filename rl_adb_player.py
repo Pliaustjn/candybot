@@ -179,6 +179,62 @@ def print_board_pretty(board: List[List[int]]) -> None:
         row_str = ' '.join([f'{v:>3}' for v in row])
         print(f'{r:>2} | {row_str}')
 
+
+def find_matches(board: List[List[int]]) -> List[Tuple[int, int]]:
+    arr = np.array(board, dtype=int)
+    size = arr.shape[0]
+    matches = set()
+
+    # horizontal
+    for r in range(size):
+        c = 0
+        while c < size - 2:
+            v = arr[r, c]
+            if v == -1:
+                c += 1
+                continue
+            run = 1
+            while c + run < size and arr[r, c + run] == v:
+                run += 1
+            if run >= 3:
+                for k in range(run):
+                    matches.add((r, c + k))
+            c += run
+
+    # vertical
+    for c in range(size):
+        r = 0
+        while r < size - 2:
+            v = arr[r, c]
+            if v == -1:
+                r += 1
+                continue
+            run = 1
+            while r + run < size and arr[r + run, c] == v:
+                run += 1
+            if run >= 3:
+                for k in range(run):
+                    matches.add((r + k, c))
+            r += run
+
+    return sorted(matches)
+
+
+def estimate_move_benefit(board: List[List[int]], p1: Tuple[int, int], p2: Tuple[int, int]) -> Tuple[int, List[Tuple[int, int]]]:
+    temp = [row[:] for row in board]
+    (r1, c1), (r2, c2) = p1, p2
+    temp[r1][c1], temp[r2][c2] = temp[r2][c2], temp[r1][c1]
+
+    matches = find_matches(temp)
+    score = 0
+    if matches:
+        score += len(matches) * 10
+        if len(matches) >= 4:
+            score += 50
+        if len(matches) >= 5:
+            score += 100
+    return score, matches
+
 def cell_center(x0, x1, y0, y1, row, col):
     cw = (x1 - x0) / GRID_SIZE
     ch = (y1 - y0) / GRID_SIZE
@@ -249,6 +305,13 @@ def run_once(step_idx: int = 0):
     print(f'RL model mode: {rl_mode} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
     print(f'RL 动作: {action}, swap ({r1},{c1}) <-> ({r2},{c2})')
+
+    est_score, matched_cells = estimate_move_benefit(board, (r1, c1), (r2, c2))
+    if matched_cells:
+        print(f'预估有利影响: 形成消除 {len(matched_cells)} 格, 预估得分 +{est_score}')
+        print(f'消除位置: {matched_cells}')
+    else:
+        print('预估有利影响: 本步不会直接形成3连，预估得分 +0')
 
     # 空位保护：如果动作落在空位则不执行
     if board[r1][c1] == -1 or board[r2][c2] == -1:
