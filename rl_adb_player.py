@@ -356,7 +356,12 @@ def run_once(step_idx: int = 0):
     er2, ec2 = maybe_swap_rc_for_execution(r2, c2)
     exec_mode = 'col,row' if USE_COL_ROW_FOR_EXECUTION else 'row,col'
     print(f'执行坐标模式: {exec_mode}')
-    print(f'执行格子: ({er1},{ec1}) <-> ({er2},{ec2})')
+    if USE_COL_ROW_FOR_EXECUTION:
+        # 此模式下 er/ec 被当成 (x,y) 解释
+        print(f'执行格子(x,y): ({er1},{ec1}) <-> ({er2},{ec2})')
+    else:
+        # 默认模式下 er/ec 是 (row,col)
+        print(f'执行格子(row,col): ({er1},{ec1}) <-> ({er2},{ec2})')
 
     # 空位保护：如果动作落在空位则不执行
     if board[er1][ec1] == -1 or board[er2][ec2] == -1:
@@ -389,7 +394,7 @@ def run_once(step_idx: int = 0):
 
     actual_dr = 'down' if ty > sy else ('up' if ty < sy else 'none')
     actual_dc = 'right' if tx > sx else ('left' if tx < sx else 'none')
-    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | decoded=(dx={dc},dy={dr}) actual=({actual_dc},{actual_dr})')
+    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | decoded_from_exec=(dx={dc},dy={dr}) actual=({actual_dc},{actual_dr})')
     print(f'adb swipe(dev): ({dsx},{dsy}) -> ({dtx},{dty}) | wm={dev_w}x{dev_h}')
     vis_path = save_action_visualization(image, sx, sy, tx, ty, ACTION_VIS_PATH)
     print(f'动作可视化图: {vis_path}')
