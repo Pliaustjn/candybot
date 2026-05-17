@@ -98,21 +98,28 @@ def save_lines_overlay(image: np.ndarray, x_lines: List[int], y_lines: List[int]
 
 
 
+def _middle_bounds(lines: List[int], size: int) -> Tuple[int, int]:
+    arr = np.array(sorted(lines), dtype=float)
+    if arr.size >= 4:
+        # Use middle quantiles to ignore extreme outlier lines at top/bottom or left/right.
+        low = int(np.percentile(arr, 20))
+        high = int(np.percentile(arr, 80))
+    elif arr.size >= 2:
+        low, high = int(arr.min()), int(arr.max())
+    else:
+        low, high = int(size * 0.2), int(size * 0.8)
+
+    low = max(0, min(size - 1, low))
+    high = max(0, min(size, high))
+    if high <= low:
+        low, high = int(size * 0.2), int(size * 0.8)
+    return low, high
+
+
 def save_detected_region_crop(image: np.ndarray, x_lines: List[int], y_lines: List[int]) -> str:
-    if len(x_lines) < 2 or len(y_lines) < 2:
-        return ''
-
-    x0, x1 = min(x_lines), max(x_lines)
-    y0, y1 = min(y_lines), max(y_lines)
-
     h, w = image.shape[:2]
-    x0 = max(0, min(w - 1, x0))
-    x1 = max(0, min(w, x1))
-    y0 = max(0, min(h - 1, y0))
-    y1 = max(0, min(h, y1))
-
-    if x1 <= x0 or y1 <= y0:
-        return ''
+    x0, x1 = _middle_bounds(x_lines, w)
+    y0, y1 = _middle_bounds(y_lines, h)
 
     crop = image[y0:y1, x0:x1]
     if crop.size == 0:
