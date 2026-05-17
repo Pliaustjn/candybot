@@ -124,6 +124,15 @@ def map_detections_to_8x8(result, img_w: int, img_h: int, x0: int, x1: int, y0: 
     return pieces
 
 
+
+def build_board_array(pieces, grid_size: int = GRID_SIZE, empty_value: int = -1):
+    board = [[empty_value for _ in range(grid_size)] for _ in range(grid_size)]
+    # 同一格多个棋子时，保留置信度更高者（pieces 已按 row,col,-conf 排序）
+    for row, col, cls_i, _name, _conf, _cx, _cy in pieces:
+        if board[row][col] == empty_value:
+            board[row][col] = int(cls_i)
+    return board
+
 def main() -> None:
     if not os.path.exists(WEIGHTS_PATH):
         print(f'❌ 模型文件不存在: {WEIGHTS_PATH}')
@@ -166,6 +175,11 @@ def main() -> None:
     print('\n棋子位置（row, col, class_id, class_name, conf, cx, cy）:')
     for p in pieces:
         print(p)
+
+    board = build_board_array(pieces, GRID_SIZE, -1)
+    print('\n8x8棋盘整数数组（class_id，空位=-1）:')
+    for row in board:
+        print(row)
 
     if os.path.exists(TEMP_IMAGE):
         os.remove(TEMP_IMAGE)
