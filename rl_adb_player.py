@@ -148,6 +148,18 @@ def decode_action(action: int, size: int = GRID_SIZE) -> Tuple[Tuple[int, int], 
     return (r, c), (r + 1, c)
 
 
+
+def build_action_mask(board: List[List[int]], size: int = GRID_SIZE) -> np.ndarray:
+    """1=legal, 0=illegal (swap touching empty cell)."""
+    board_np = np.array(board)
+    n_actions = (size * (size - 1)) * 2
+    mask = np.ones(n_actions, dtype=np.float32)
+    for a in range(n_actions):
+        (r1, c1), (r2, c2) = decode_action(a, size)
+        if board_np[r1, c1] == -1 or board_np[r2, c2] == -1:
+            mask[a] = 0.0
+    return mask
+
 def map_detections_to_8x8(result, img_w: int, img_h: int, x0: int, x1: int, y0: int, y1: int):
     pieces = []
     for xywhn, cls, conf in zip(result.boxes.xywhn.cpu().numpy(), result.boxes.cls.cpu().numpy(), result.boxes.conf.cpu().numpy()):
@@ -320,14 +332,25 @@ def run_once(step_idx: int = 0):
 
     with torch.inference_mode():
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
-        action = int(torch.argmax(probs, dim=1).item())
+        prob_vec = probs.squeeze(0).cpu().numpy()
+
+    # 动作掩码：过滤掉涉及空位(-1)的非法交换，再做argmax
+    mask = build_action_mask(board, GRID_SIZE)
+    masked = prob_vec * mask
+    if masked.sum() <= 0:
+        # 兜底：若全被mask掉，退回原始argmax
+        action = int(np.argmax(prob_vec))
+        print('⚠️ 动作掩码后无可用动作，回退原始argmax')
+    else:
+        action = int(np.argmax(masked))
 
     rl_mode = 'eval' if not model.training else 'train'
     print(f'RL model mode: {rl_mode} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
     x1g, y1g = rc_to_xy(r1, c1)
     x2g, y2g = rc_to_xy(r2, c2)
-    print(f'RL 动作: {action}, swap (x={x1g}, y={y1g}) <-> (x={x2g}, y={y2g})')
+    legal_count = int(mask.sum())
+    print(f'RL 动作: {action}, swap (x={x1g}, y={y1g}) <-> (x={x2g}, y={y2g}) | legal_actions={legal_count}')
 
     er1, ec1 = maybe_swap_rc_for_execution(r1, c1)
     er2, ec2 = maybe_swap_rc_for_execution(r2, c2)
