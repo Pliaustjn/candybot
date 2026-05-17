@@ -178,8 +178,7 @@ def main() -> None:
 
     board = build_board_array(pieces, GRID_SIZE, -1)
     print('\n8x8棋盘整数数组（class_id，空位=-1）:')
-    for row in board:
-        print(row)
+    print(board)
 
     if os.path.exists(TEMP_IMAGE):
         os.remove(TEMP_IMAGE)
