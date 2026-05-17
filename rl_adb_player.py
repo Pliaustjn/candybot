@@ -20,15 +20,8 @@ CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 
 # adb 滑动时长（毫秒）
 SWIPE_MS = 120
-MOVE_INTERVAL_SEC = 1.2
+MOVE_INTERVAL_SEC = 0.8
 MAX_MOVES = 30
-TOTAL_REALTIME_SCORE = 0
-REPEAT_ACTION_LIMIT = 2
-LAST_BOARD_KEY = None
-LAST_ACTION = None
-REPEAT_COUNT = 0
-MIN_ACCEPT_SCORE = 10
-TOPK_ACTION_SEARCH = 20
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -186,62 +179,6 @@ def print_board_pretty(board: List[List[int]]) -> None:
         row_str = ' '.join([f'{v:>3}' for v in row])
         print(f'{r:>2} | {row_str}')
 
-
-def find_matches(board: List[List[int]]) -> List[Tuple[int, int]]:
-    arr = np.array(board, dtype=int)
-    size = arr.shape[0]
-    matches = set()
-
-    # horizontal
-    for r in range(size):
-        c = 0
-        while c < size - 2:
-            v = arr[r, c]
-            if v == -1:
-                c += 1
-                continue
-            run = 1
-            while c + run < size and arr[r, c + run] == v:
-                run += 1
-            if run >= 3:
-                for k in range(run):
-                    matches.add((r, c + k))
-            c += run
-
-    # vertical
-    for c in range(size):
-        r = 0
-        while r < size - 2:
-            v = arr[r, c]
-            if v == -1:
-                r += 1
-                continue
-            run = 1
-            while r + run < size and arr[r + run, c] == v:
-                run += 1
-            if run >= 3:
-                for k in range(run):
-                    matches.add((r + k, c))
-            r += run
-
-    return sorted(matches)
-
-
-def estimate_move_benefit(board: List[List[int]], p1: Tuple[int, int], p2: Tuple[int, int]) -> Tuple[int, List[Tuple[int, int]]]:
-    temp = [row[:] for row in board]
-    (r1, c1), (r2, c2) = p1, p2
-    temp[r1][c1], temp[r2][c2] = temp[r2][c2], temp[r1][c1]
-
-    matches = find_matches(temp)
-    score = 0
-    if matches:
-        score += len(matches) * 10
-        if len(matches) >= 4:
-            score += 50
-        if len(matches) >= 5:
-            score += 100
-    return score, matches
-
 def cell_center(x0, x1, y0, y1, row, col):
     cw = (x1 - x0) / GRID_SIZE
     ch = (y1 - y0) / GRID_SIZE
@@ -255,7 +192,6 @@ def adb_swipe(x1, y1, x2, y2):
 
 
 def run_once(step_idx: int = 0):
-    global TOTAL_REALTIME_SCORE, LAST_BOARD_KEY, LAST_ACTION, REPEAT_COUNT
     if not os.path.exists(WEIGHTS_PATH) or not os.path.exists(RL_MODEL_PATH):
         print('❌ 缺少 best.pt 或 candy_crush_model.pth')
         return
@@ -307,67 +243,12 @@ def run_once(step_idx: int = 0):
 
     with torch.inference_mode():
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
-        prob_vec = probs.squeeze(0).cpu().numpy()
-        action = int(np.argmax(prob_vec))
-
-    # 优先在高概率动作中搜索“可得分动作”，避免一直执行 +0 分动作
-    ranked_all = np.argsort(-prob_vec)
-    chosen_by_score = False
-    for cand in ranked_all[:TOPK_ACTION_SEARCH]:
-        cand = int(cand)
-        (tr1, tc1), (tr2, tc2) = decode_action(cand, GRID_SIZE)
-        if board[tr1][tc1] == -1 or board[tr2][tc2] == -1:
-            continue
-        cand_score, _ = estimate_move_benefit(board, (tr1, tc1), (tr2, tc2))
-        if cand_score >= MIN_ACCEPT_SCORE:
-            if cand != action:
-                print(f'✅ 从Top-{TOPK_ACTION_SEARCH}策略动作中选到可得分动作: {cand} (score={cand_score})')
-            action = cand
-            chosen_by_score = True
-            break
-
-    board_key = tuple(tuple(r) for r in board)
-    if board_key == LAST_BOARD_KEY and action == LAST_ACTION:
-        REPEAT_COUNT += 1
-    else:
-        REPEAT_COUNT = 0
-
-    # 连续重复同一动作时，尝试次优动作，避免卡死循环
-    if REPEAT_COUNT >= REPEAT_ACTION_LIMIT:
-        ranked = np.argsort(-prob_vec)
-        swapped = False
-        for cand in ranked:
-            cand = int(cand)
-            if cand == action:
-                continue
-            (cr1, cc1), (cr2, cc2) = decode_action(cand, GRID_SIZE)
-            if board[cr1][cc1] != -1 and board[cr2][cc2] != -1:
-                print(f'⚠️ 检测到重复动作，改用次优动作: {cand}')
-                action = cand
-                swapped = True
-                break
-        if not swapped:
-            print('⚠️ 检测到重复动作，但未找到可替代动作')
-
-    if not chosen_by_score:
-        print('⚠️ Top策略动作中未找到可直接得分动作，使用策略原始/防重复动作')
-
-    LAST_BOARD_KEY = board_key
-    LAST_ACTION = action
+        action = int(torch.argmax(probs, dim=1).item())
 
     rl_mode = 'eval' if not model.training else 'train'
     print(f'RL model mode: {rl_mode} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
     print(f'RL 动作: {action}, swap ({r1},{c1}) <-> ({r2},{c2})')
-
-    est_score, matched_cells = estimate_move_benefit(board, (r1, c1), (r2, c2))
-    if matched_cells:
-        TOTAL_REALTIME_SCORE += est_score
-        print(f'实时评分: 本步 +{est_score} 分, 累计 {TOTAL_REALTIME_SCORE} 分')
-        print(f'形成消除 {len(matched_cells)} 格, 消除位置: {matched_cells}')
-    else:
-        print(f'实时评分: 本步 +0 分, 累计 {TOTAL_REALTIME_SCORE} 分')
-        print('本步不会直接形成3连')
 
     # 空位保护：如果动作落在空位则不执行
     if board[r1][c1] == -1 or board[r2][c2] == -1:
@@ -392,7 +273,6 @@ def main():
             success += 1
         time.sleep(MOVE_INTERVAL_SEC)
     print(f'\n完成。共发送 {success}/{MAX_MOVES} 次移动命令。')
-    print(f'实时累计得分: {TOTAL_REALTIME_SCORE}')
 
 
 if __name__ == '__main__':
