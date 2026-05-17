@@ -22,6 +22,7 @@ CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 SWIPE_MS = 120
 MOVE_INTERVAL_SEC = 0.8
 MAX_MOVES = 30
+ACTION_VIS_PATH = 'last_action_vis.png'
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -198,6 +199,17 @@ def cell_center(x0, x1, y0, y1, row, col):
 
 
 
+
+def save_action_visualization(image: np.ndarray, sx: int, sy: int, tx: int, ty: int, path: str = ACTION_VIS_PATH) -> str:
+    vis = image.copy()
+    cv2.arrowedLine(vis, (sx, sy), (tx, ty), (0, 0, 255), 4, tipLength=0.2)
+    cv2.circle(vis, (sx, sy), 10, (255, 0, 0), -1)
+    cv2.circle(vis, (tx, ty), 10, (0, 255, 0), -1)
+    cv2.putText(vis, 'START', (sx + 12, sy - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+    cv2.putText(vis, 'END', (tx + 12, ty - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.imwrite(path, vis)
+    return path
+
 def get_device_screen_size() -> Tuple[int, int]:
     """Return (width, height) from `adb shell wm size`, fallback (0,0)."""
     try:
@@ -320,6 +332,8 @@ def run_once(step_idx: int = 0):
 
     print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dr}, dc={dc})')
     print(f'adb swipe(dev): ({dsx},{dsy}) -> ({dtx},{dty}) | wm={dev_w}x{dev_h}')
+    vis_path = save_action_visualization(image, sx, sy, tx, ty, ACTION_VIS_PATH)
+    print(f'动作可视化图: {vis_path}')
     adb_swipe(dsx, dsy, dtx, dty)
     print('✅ 已发送 adb 移动命令')
     return True
