@@ -145,6 +145,29 @@ def save_detected_region_crop(image: np.ndarray, x_lines: List[int], y_lines: Li
     cv2.imwrite(path, crop)
     return path
 
+
+def save_crop_with_8x8_grid(image: np.ndarray, x_lines: List[int], y_lines: List[int], grid_size: int = GRID_SIZE) -> str:
+    h, w = image.shape[:2]
+    x0, x1 = _middle_bounds(x_lines, w)
+    y0, y1 = _middle_bounds_y(y_lines, h)
+
+    crop = image[y0:y1, x0:x1].copy()
+    if crop.size == 0:
+        return ''
+
+    ch, cw = crop.shape[:2]
+    xs = [int(v) for v in np.linspace(0, cw - 1, grid_size + 1)]
+    ys = [int(v) for v in np.linspace(0, ch - 1, grid_size + 1)]
+
+    for x in xs:
+        cv2.line(crop, (x, 0), (x, ch - 1), (0, 255, 255), 1)
+    for y in ys:
+        cv2.line(crop, (0, y), (cw - 1, y), (0, 255, 0), 1)
+
+    path = 'grid_detected_region_8x8.png'
+    cv2.imwrite(path, crop)
+    return path
+
 def main() -> None:
     cap = AdbCapture(PHONE_IP)
     print(f'连接 adb: {PHONE_IP}')
@@ -170,6 +193,7 @@ def main() -> None:
     overlay_path = save_lines_overlay(image, x_lines, y_lines)
     cv2.imwrite('grid_hough_edges.png', edges)
     crop_path = save_detected_region_crop(image, x_lines, y_lines)
+    grid_crop_path = save_crop_with_8x8_grid(image, x_lines, y_lines, GRID_SIZE)
 
     print(f'\n✅ 已输出横线+竖线图片: {overlay_path}')
     print('✅ 已输出边缘图: grid_hough_edges.png')
@@ -177,6 +201,11 @@ def main() -> None:
         print(f'✅ 已输出检测区域裁剪图: {crop_path}')
     else:
         print('⚠️ 线条不足，未生成检测区域裁剪图')
+
+    if grid_crop_path:
+        print(f'✅ 已输出裁剪区域8x8网格图: {grid_crop_path}')
+    else:
+        print('⚠️ 裁剪区域为空，未生成8x8网格图')
 
     if os.path.exists(TEMP_IMAGE):
         os.remove(TEMP_IMAGE)
