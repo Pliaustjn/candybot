@@ -116,10 +116,27 @@ def _middle_bounds(lines: List[int], size: int) -> Tuple[int, int]:
     return low, high
 
 
+
+def _middle_bounds_y(lines: List[int], size: int) -> Tuple[int, int]:
+    arr = np.array(sorted(lines), dtype=float)
+    if arr.size >= 6:
+        # 按你的反馈：上面多两部分、下面多一部分
+        # 直接去掉最上面2条、最下面1条再取边界
+        low = int(arr[2])
+        high = int(arr[-2])
+    else:
+        low, high = _middle_bounds(lines, size)
+
+    low = max(0, min(size - 1, low))
+    high = max(0, min(size, high))
+    if high <= low:
+        low, high = _middle_bounds(lines, size)
+    return low, high
+
 def save_detected_region_crop(image: np.ndarray, x_lines: List[int], y_lines: List[int]) -> str:
     h, w = image.shape[:2]
     x0, x1 = _middle_bounds(x_lines, w)
-    y0, y1 = _middle_bounds(y_lines, h)
+    y0, y1 = _middle_bounds_y(y_lines, h)
 
     crop = image[y0:y1, x0:x1]
     if crop.size == 0:
