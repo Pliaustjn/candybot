@@ -200,11 +200,17 @@ def main():
     y0, y1 = _middle_bounds_y(y_lines, h)
 
     yolo = YOLO(WEIGHTS_PATH)
+    # 强制 YOLO 仅推理模式
+    if hasattr(yolo, 'model') and yolo.model is not None:
+        yolo.model.eval()
+        for p in yolo.model.parameters():
+            p.requires_grad = False
     results = yolo.predict(source=TEMP_IMAGE, conf=CONFIDENCE, iou=IOU, verbose=False)
     if not results or results[0].boxes is None or len(results[0].boxes) == 0:
         print('⚠️ 未检测到棋子')
         return
 
+    print(f"YOLO model mode: {'eval' if hasattr(yolo, 'model') and (not yolo.model.training) else 'train'} (inference-only)")
     pieces = map_detections_to_8x8(results[0], w, h, x0, x1, y0, y1)
     board = build_board_array(pieces, -1)
     print('8x8棋盘整数数组:')
