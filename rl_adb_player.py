@@ -23,7 +23,7 @@ SWIPE_MS = 120
 MOVE_INTERVAL_SEC = 0.8
 MAX_MOVES = 30
 ACTION_VIS_PATH = 'last_action_vis.png'
-USE_COL_ROW_FOR_EXECUTION = True  # True: 按(col,row)解释RL输出再执行
+USE_COL_ROW_FOR_EXECUTION = False  # True: 按(col,row)解释RL输出再执行
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -334,6 +334,14 @@ def run_once(step_idx: int = 0):
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
         prob_vec = probs.squeeze(0).cpu().numpy()
 
+    # 输出RL原始策略Top-5（未掩码）
+    raw_topk = np.argsort(-prob_vec)[:5]
+    print('RL原始输出Top-5(未掩码):')
+    for rk, a in enumerate(raw_topk, 1):
+        a = int(a)
+        (rr1, cc1), (rr2, cc2) = decode_action(a, GRID_SIZE)
+        print(f'  {rk}. action={a}, prob={prob_vec[a]:.6f}, swap(row,col)=({rr1},{cc1})<->({rr2},{cc2})')
+
     # 动作掩码：过滤掉涉及空位(-1)的非法交换，再做argmax
     mask = build_action_mask(board, GRID_SIZE)
     masked = prob_vec * mask
@@ -356,12 +364,7 @@ def run_once(step_idx: int = 0):
     er2, ec2 = maybe_swap_rc_for_execution(r2, c2)
     exec_mode = 'col,row' if USE_COL_ROW_FOR_EXECUTION else 'row,col'
     print(f'执行坐标模式: {exec_mode}')
-    if USE_COL_ROW_FOR_EXECUTION:
-        # 此模式下 er/ec 被当成 (x,y) 解释
-        print(f'执行格子(x,y): ({er1},{ec1}) <-> ({er2},{ec2})')
-    else:
-        # 默认模式下 er/ec 是 (row,col)
-        print(f'执行格子(row,col): ({er1},{ec1}) <-> ({er2},{ec2})')
+    print(f'执行格子(row,col): ({er1},{ec1}) <-> ({er2},{ec2})')
 
     # 空位保护：如果动作落在空位则不执行
     if board[er1][ec1] == -1 or board[er2][ec2] == -1:
