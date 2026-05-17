@@ -6,13 +6,11 @@ from typing import List, Tuple
 import numpy as np
 from ultralytics import YOLO
 
-# ================== 配置区（可在 PyCharm 直接修改） ==================
-PHONE_IP = '192.168.2.16:5555'       # 手机 adb 地址
-WEIGHTS_PATH = 'best.pt'             # YOLO 权重路径
-CONFIDENCE = 0.25                    # 置信度阈值
-IOU = 0.45                           # NMS IoU 阈值
-CAPTURE_INTERVAL_SEC = 1.0           # 每次输出棋盘的间隔（秒）
-# ====================================================================
+PHONE_IP = '192.168.2.16:5555'
+WEIGHTS_PATH = 'best.pt'
+CONFIDENCE = 0.25
+IOU = 0.45
+CAPTURE_INTERVAL_SEC = 1.0
 
 CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 EMPTY_VALUE = 6
@@ -51,13 +49,33 @@ def detections_to_board(
     grid_size: int = GRID_SIZE,
     empty_value: int = EMPTY_VALUE,
 ) -> Tuple[List[List[int]], List[Tuple[int, int, int, int]]]:
+    """Map detections to board using detected-board bbox, not full screenshot."""
     board = [[empty_value for _ in range(grid_size)] for _ in range(grid_size)]
     conflicts = []
 
+    xs = boxes_xywhn[:, 0].astype(float)
+    ys = boxes_xywhn[:, 1].astype(float)
+    ws = boxes_xywhn[:, 2].astype(float)
+    hs = boxes_xywhn[:, 3].astype(float)
+
+    pad_x = float(np.median(ws) * 0.5)
+    pad_y = float(np.median(hs) * 0.5)
+
+    x_min = max(0.0, float(xs.min() - pad_x))
+    x_max = min(1.0, float(xs.max() + pad_x))
+    y_min = max(0.0, float(ys.min() - pad_y))
+    y_max = min(1.0, float(ys.max() + pad_y))
+
+    x_span = max(1e-6, x_max - x_min)
+    y_span = max(1e-6, y_max - y_min)
+
     for box, cls in zip(boxes_xywhn, classes):
         x_center, y_center = float(box[0]), float(box[1])
-        col = min(grid_size - 1, max(0, int(x_center * grid_size)))
-        row = min(grid_size - 1, max(0, int(y_center * grid_size)))
+        x_norm = (x_center - x_min) / x_span
+        y_norm = (y_center - y_min) / y_span
+
+        col = min(grid_size - 1, max(0, int(x_norm * grid_size)))
+        row = min(grid_size - 1, max(0, int(y_norm * grid_size)))
 
         cls_int = int(cls)
         if board[row][col] != empty_value:
@@ -86,7 +104,6 @@ def infer_board_from_image(model: YOLO, image_path: str, conf: float, iou: float
 
     boxes_xywhn = result.boxes.xywhn.cpu().numpy()
     classes = result.boxes.cls.cpu().numpy()
-
     board, conflicts = detections_to_board(boxes_xywhn, classes)
 
     invalid = sorted({int(c) for c in classes if int(c) < 0 or int(c) >= len(CLASS_NAMES)})
@@ -94,9 +111,7 @@ def infer_board_from_image(model: YOLO, image_path: str, conf: float, iou: float
         print(f'⚠️ 发现未知类别ID: {invalid}（预期 0~5）')
 
     if conflicts:
-        print('\n⚠️ 发现格子冲突（多个检测落在同一格，后者覆盖前者）:')
-        for row, col, old_cls, new_cls in conflicts:
-            print(f'  - cell({row},{col}): {old_cls} -> {new_cls}')
+        print(f'\n⚠️ 发现格子冲突: {len(conflicts)} 个（说明检测重叠或阈值需要调整）')
 
     return board
 
@@ -116,9 +131,7 @@ def run_realtime(
 
     model = YOLO(weights_path)
     temp_image_path = 'temp_screen.png'
-
-    print('\n开始实时识别：每次截图后输出9x9棋盘。')
-    print('按 Ctrl+C 结束。')
+    print('\n开始实时识别：每次截图后输出9x9棋盘。按 Ctrl+C 结束。')
 
     try:
         while True:
