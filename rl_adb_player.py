@@ -23,6 +23,7 @@ SWIPE_MS = 120
 MOVE_INTERVAL_SEC = 0.8
 MAX_MOVES = 30
 ACTION_VIS_PATH = 'last_action_vis.png'
+USE_COL_ROW_FOR_EXECUTION = True  # True: 按(col,row)解释RL输出再执行
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -202,6 +203,13 @@ def cell_center(x0, x1, y0, y1, row, col):
 
 
 
+
+def maybe_swap_rc_for_execution(r: int, c: int) -> Tuple[int, int]:
+    """Optionally treat RL output as (col,row) for execution experiments."""
+    if USE_COL_ROW_FOR_EXECUTION:
+        return c, r
+    return r, c
+
 def rc_to_xy(r: int, c: int) -> Tuple[int, int]:
     """Convert internal (row,col) to user-facing (x,y)."""
     return c, r
@@ -321,29 +329,34 @@ def run_once(step_idx: int = 0):
     x2g, y2g = rc_to_xy(r2, c2)
     print(f'RL 动作: {action}, swap (x={x1g}, y={y1g}) <-> (x={x2g}, y={y2g})')
 
+    er1, ec1 = maybe_swap_rc_for_execution(r1, c1)
+    er2, ec2 = maybe_swap_rc_for_execution(r2, c2)
+    print(f'执行坐标模式: {'col,row' if USE_COL_ROW_FOR_EXECUTION else 'row,col'}')
+    print(f'执行格子: ({er1},{ec1}) <-> ({er2},{ec2})')
+
     # 空位保护：如果动作落在空位则不执行
-    if board[r1][c1] == -1 or board[r2][c2] == -1:
+    if board[er1][ec1] == -1 or board[er2][ec2] == -1:
         print('⚠️ RL 动作包含空位，取消执行 adb 移动')
         return
 
     # 优先使用 YOLO 实际检测到的格子中心（更贴近真实棋子位置）
-    if (r1, c1) in cell_center_map:
-        sx, sy = cell_center_map[(r1, c1)]
+    if (er1, ec1) in cell_center_map:
+        sx, sy = cell_center_map[(er1, ec1)]
     else:
-        sx, sy = cell_center(x0, x1, y0, y1, r1, c1)
+        sx, sy = cell_center(x0, x1, y0, y1, er1, ec1)
 
-    if (r2, c2) in cell_center_map:
-        tx, ty = cell_center_map[(r2, c2)]
+    if (er2, ec2) in cell_center_map:
+        tx, ty = cell_center_map[(er2, ec2)]
     else:
         # 回退：按动作方向构造终点
         cell_w = max(1.0, (x1 - x0) / GRID_SIZE)
         cell_h = max(1.0, (y1 - y0) / GRID_SIZE)
-        dx = c2 - c1
-        dy = r2 - r1
+        dx = ec2 - ec1
+        dy = er2 - er1
         tx = int(sx + dx * cell_w * 0.8)
         ty = int(sy + dy * cell_h * 0.8)
 
-    dr, dc = (r2 - r1), (c2 - c1)
+    dr, dc = (er2 - er1), (ec2 - ec1)
     tx, ty = align_endpoint_by_action(sx, sy, tx, ty, dr, dc)
 
     dev_w, dev_h = get_device_screen_size()
