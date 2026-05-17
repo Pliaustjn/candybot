@@ -81,14 +81,6 @@ def detect_grid_lines(image: np.ndarray) -> Tuple[List[int], List[int], np.ndarr
     return x_lines, y_lines, edges
 
 
-def _fit_to_grid_lines(raw_lines: List[int], size: int, grid_size: int = GRID_SIZE) -> List[int]:
-    target = grid_size + 1
-    if len(raw_lines) >= target:
-        idx = np.linspace(0, len(raw_lines) - 1, target)
-        return [int(raw_lines[int(i)]) for i in idx]
-    if len(raw_lines) >= 2:
-        return [int(v) for v in np.linspace(raw_lines[0], raw_lines[-1], target)]
-    return [int(v) for v in np.linspace(int(size * 0.15), int(size * 0.85), target)]
 
 
 def save_lines_overlay(image: np.ndarray, x_lines: List[int], y_lines: List[int]) -> str:
@@ -127,13 +119,7 @@ def main() -> None:
     print('\n检测到的候选竖线 x 坐标:', x_lines)
     print('检测到的候选横线 y 坐标:', y_lines)
 
-    x_grid = _fit_to_grid_lines(x_lines, image.shape[1], GRID_SIZE)
-    y_grid = _fit_to_grid_lines(y_lines, image.shape[0], GRID_SIZE)
-
-    print('\n推断后的竖向网格线 x_grid:', x_grid)
-    print('推断后的横向网格线 y_grid:', y_grid)
-
-    overlay_path = save_lines_overlay(image, x_grid, y_grid)
+    overlay_path = save_lines_overlay(image, x_lines, y_lines)
     cv2.imwrite('grid_hough_edges.png', edges)
     print(f'\n✅ 已输出横线+竖线图片: {overlay_path}')
     print('✅ 已输出边缘图: grid_hough_edges.png')
