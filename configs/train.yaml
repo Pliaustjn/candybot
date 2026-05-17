@@ -1,0 +1,8 @@
+total_timesteps: 50000
+n_envs: 4
+learning_rate: 0.0003
+n_steps: 1024
+batch_size: 256
+gamma: 0.99
+run_root: logs
+seed: 42
