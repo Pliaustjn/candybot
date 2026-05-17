@@ -27,6 +27,8 @@ REPEAT_ACTION_LIMIT = 2
 LAST_BOARD_KEY = None
 LAST_ACTION = None
 REPEAT_COUNT = 0
+MIN_ACCEPT_SCORE = 10
+TOPK_ACTION_SEARCH = 20
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -308,6 +310,22 @@ def run_once(step_idx: int = 0):
         prob_vec = probs.squeeze(0).cpu().numpy()
         action = int(np.argmax(prob_vec))
 
+    # 优先在高概率动作中搜索“可得分动作”，避免一直执行 +0 分动作
+    ranked_all = np.argsort(-prob_vec)
+    chosen_by_score = False
+    for cand in ranked_all[:TOPK_ACTION_SEARCH]:
+        cand = int(cand)
+        (tr1, tc1), (tr2, tc2) = decode_action(cand, GRID_SIZE)
+        if board[tr1][tc1] == -1 or board[tr2][tc2] == -1:
+            continue
+        cand_score, _ = estimate_move_benefit(board, (tr1, tc1), (tr2, tc2))
+        if cand_score >= MIN_ACCEPT_SCORE:
+            if cand != action:
+                print(f'✅ 从Top-{TOPK_ACTION_SEARCH}策略动作中选到可得分动作: {cand} (score={cand_score})')
+            action = cand
+            chosen_by_score = True
+            break
+
     board_key = tuple(tuple(r) for r in board)
     if board_key == LAST_BOARD_KEY and action == LAST_ACTION:
         REPEAT_COUNT += 1
@@ -330,6 +348,9 @@ def run_once(step_idx: int = 0):
                 break
         if not swapped:
             print('⚠️ 检测到重复动作，但未找到可替代动作')
+
+    if not chosen_by_score:
+        print('⚠️ Top策略动作中未找到可直接得分动作，使用策略原始/防重复动作')
 
     LAST_BOARD_KEY = board_key
     LAST_ACTION = action
