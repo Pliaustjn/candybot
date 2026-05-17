@@ -167,6 +167,16 @@ def build_board_array(pieces, empty_value=-1):
     return board
 
 
+
+def print_board_pretty(board: List[List[int]]) -> None:
+    print('8x8棋盘视图（空位=-1）:')
+    header = '    ' + ' '.join([f'{c:>3}' for c in range(GRID_SIZE)])
+    print(header)
+    print('    ' + '---' * GRID_SIZE)
+    for r, row in enumerate(board):
+        row_str = ' '.join([f'{v:>3}' for v in row])
+        print(f'{r:>2} | {row_str}')
+
 def cell_center(x0, x1, y0, y1, row, col):
     cw = (x1 - x0) / GRID_SIZE
     ch = (y1 - y0) / GRID_SIZE
@@ -215,6 +225,7 @@ def main():
     board = build_board_array(pieces, -1)
     print('8x8棋盘整数数组:')
     print(board)
+    print_board_pretty(board)
 
     obs = board_to_onehot(board)  # (7,8,8)
     model = ActorCritic(board_size=8, n_channels=7, n_actions=112)
@@ -231,7 +242,8 @@ def main():
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
         action = int(torch.argmax(probs, dim=1).item())
 
-    print(f'RL model mode: {'eval' if not model.training else 'train'} (decision-only)')
+    rl_mode = 'eval' if not model.training else 'train'
+    print(f'RL model mode: {rl_mode} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
     print(f'RL 动作: {action}, swap ({r1},{c1}) <-> ({r2},{c2})')
 
