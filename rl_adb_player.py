@@ -24,6 +24,9 @@ MOVE_INTERVAL_SEC = 0.8
 MAX_MOVES = 30
 ACTION_VIS_PATH = 'last_action_vis.png'
 USE_COL_ROW_FOR_EXECUTION = False  # True: 按(col,row)解释RL输出再执行
+LAST_ACTION = None
+REPEAT_SAME_ACTION = 0
+REPEAT_LIMIT = 2
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -280,6 +283,7 @@ def adb_swipe(x1, y1, x2, y2):
 
 
 def run_once(step_idx: int = 0):
+    global LAST_ACTION, REPEAT_SAME_ACTION
     if not os.path.exists(WEIGHTS_PATH) or not os.path.exists(RL_MODEL_PATH):
         print('❌ 缺少 best.pt 或 candy_crush_model.pth')
         return
@@ -321,7 +325,7 @@ def run_once(step_idx: int = 0):
 
     obs = board_to_onehot(board)  # (7,8,8)
     model = ActorCritic(board_size=8, n_channels=7, n_actions=112)
-    state_dict = torch.load(RL_MODEL_PATH, map_location='cpu')
+    state_dict = torch.load(RL_MODEL_PATH, map_location='cpu', weights_only=True)
     model.load_state_dict(state_dict)
 
     # 强制仅决策模式：关闭训练态 + 冻结参数梯度
@@ -355,10 +359,30 @@ def run_once(step_idx: int = 0):
     rl_mode = 'eval' if not model.training else 'train'
     print(f'RL model mode: {rl_mode} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
-    x1g, y1g = rc_to_xy(r1, c1)
-    x2g, y2g = rc_to_xy(r2, c2)
+
+    if LAST_ACTION == action:
+        REPEAT_SAME_ACTION += 1
+    else:
+        REPEAT_SAME_ACTION = 0
+    if REPEAT_SAME_ACTION >= REPEAT_LIMIT:
+        ranked_masked = np.argsort(-masked)
+        changed = False
+        for cand in ranked_masked:
+            cand = int(cand)
+            if cand == action or masked[cand] <= 0:
+                continue
+            action = cand
+            (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
+            REPEAT_SAME_ACTION = 0
+            changed = True
+            print(f'⚠️ 检测到重复动作，切换次优合法动作: {action}')
+            break
+        if not changed:
+            print('⚠️ 重复动作但未找到次优合法动作')
+    LAST_ACTION = action
+
     legal_count = int(mask.sum())
-    print(f'RL 动作: {action}, swap (x={x1g}, y={y1g}) <-> (x={x2g}, y={y2g}) | legal_actions={legal_count}')
+    print(f'RL 动作: {action}, swap(row,col)=({r1},{c1}) <-> ({r2},{c2}) | legal_actions={legal_count}')
 
     er1, ec1 = maybe_swap_rc_for_execution(r1, c1)
     er2, ec2 = maybe_swap_rc_for_execution(r2, c2)
