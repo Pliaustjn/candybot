@@ -20,8 +20,6 @@ CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 
 # adb 滑动时长（毫秒）
 SWIPE_MS = 120
-MOVE_INTERVAL_SEC = 0.8
-MAX_MOVES = 30
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -169,16 +167,6 @@ def build_board_array(pieces, empty_value=-1):
     return board
 
 
-
-def print_board_pretty(board: List[List[int]]) -> None:
-    print('8x8棋盘视图（空位=-1）:')
-    header = '    ' + ' '.join([f'{c:>3}' for c in range(GRID_SIZE)])
-    print(header)
-    print('    ' + '---' * GRID_SIZE)
-    for r, row in enumerate(board):
-        row_str = ' '.join([f'{v:>3}' for v in row])
-        print(f'{r:>2} | {row_str}')
-
 def cell_center(x0, x1, y0, y1, row, col):
     cw = (x1 - x0) / GRID_SIZE
     ch = (y1 - y0) / GRID_SIZE
@@ -191,7 +179,7 @@ def adb_swipe(x1, y1, x2, y2):
     subprocess.run(['adb', 'shell', 'input', 'swipe', str(x1), str(y1), str(x2), str(y2), str(SWIPE_MS)], check=False)
 
 
-def run_once(step_idx: int = 0):
+def main():
     if not os.path.exists(WEIGHTS_PATH) or not os.path.exists(RL_MODEL_PATH):
         print('❌ 缺少 best.pt 或 candy_crush_model.pth')
         return
@@ -225,10 +213,8 @@ def run_once(step_idx: int = 0):
     print(f"YOLO model mode: {'eval' if hasattr(yolo, 'model') and (not yolo.model.training) else 'train'} (inference-only)")
     pieces = map_detections_to_8x8(results[0], w, h, x0, x1, y0, y1)
     board = build_board_array(pieces, -1)
-    print(f'\n===== 实际操作 Step {step_idx} =====')
     print('8x8棋盘整数数组:')
     print(board)
-    print_board_pretty(board)
 
     obs = board_to_onehot(board)  # (7,8,8)
     model = ActorCritic(board_size=8, n_channels=7, n_actions=112)
@@ -245,8 +231,7 @@ def run_once(step_idx: int = 0):
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
         action = int(torch.argmax(probs, dim=1).item())
 
-    rl_mode = 'eval' if not model.training else 'train'
-    print(f'RL model mode: {rl_mode} (decision-only)')
+    print(f'RL model mode: {'eval' if not model.training else 'train'} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
     print(f'RL 动作: {action}, swap ({r1},{c1}) <-> ({r2},{c2})')
 
@@ -257,22 +242,9 @@ def run_once(step_idx: int = 0):
 
     sx, sy = cell_center(x0, x1, y0, y1, r1, c1)
     tx, ty = cell_center(x0, x1, y0, y1, r2, c2)
-    cmd_preview = f"adb shell input swipe {sx} {sy} {tx} {ty} {SWIPE_MS}"
-    print(f'adb命令: {cmd_preview}')
+    print(f'adb swipe: ({sx},{sy}) -> ({tx},{ty})')
     adb_swipe(sx, sy, tx, ty)
     print('✅ 已发送 adb 移动命令')
-    return True
-
-
-def main():
-    print('开始实际ADB操作模式（非训练演示）')
-    success = 0
-    for i in range(1, MAX_MOVES + 1):
-        ok = run_once(i)
-        if ok:
-            success += 1
-        time.sleep(MOVE_INTERVAL_SEC)
-    print(f'\n完成。共发送 {success}/{MAX_MOVES} 次移动命令。')
 
 
 if __name__ == '__main__':
