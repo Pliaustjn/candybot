@@ -20,6 +20,8 @@ CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 
 # adb 滑动时长（毫秒）
 SWIPE_MS = 120
+MOVE_INTERVAL_SEC = 0.8
+MAX_MOVES = 30
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -185,11 +187,35 @@ def cell_center(x0, x1, y0, y1, row, col):
     return x, y
 
 
+
+def get_device_screen_size() -> Tuple[int, int]:
+    """Return (width, height) from `adb shell wm size`, fallback (0,0)."""
+    try:
+        out = subprocess.run(['adb', 'shell', 'wm', 'size'], capture_output=True, text=True, timeout=5)
+        text = out.stdout.strip()
+        # e.g. Physical size: 1080x2400
+        for part in text.split():
+            if 'x' in part and part.replace('x', '').replace(':', '').isdigit() is False:
+                pass
+        import re
+        m = re.search(r'(\d+)x(\d+)', text)
+        if m:
+            return int(m.group(1)), int(m.group(2))
+    except Exception:
+        pass
+    return 0, 0
+
+
+def map_img_to_device(x: int, y: int, img_w: int, img_h: int, dev_w: int, dev_h: int) -> Tuple[int, int]:
+    if dev_w <= 0 or dev_h <= 0 or img_w <= 0 or img_h <= 0:
+        return x, y
+    return int(x * dev_w / img_w), int(y * dev_h / img_h)
+
 def adb_swipe(x1, y1, x2, y2):
     subprocess.run(['adb', 'shell', 'input', 'swipe', str(x1), str(y1), str(x2), str(y2), str(SWIPE_MS)], check=False)
 
 
-def main():
+def run_once(step_idx: int = 0):
     if not os.path.exists(WEIGHTS_PATH) or not os.path.exists(RL_MODEL_PATH):
         print('❌ 缺少 best.pt 或 candy_crush_model.pth')
         return
@@ -223,6 +249,7 @@ def main():
     print(f"YOLO model mode: {'eval' if hasattr(yolo, 'model') and (not yolo.model.training) else 'train'} (inference-only)")
     pieces = map_detections_to_8x8(results[0], w, h, x0, x1, y0, y1)
     board = build_board_array(pieces, -1)
+    print(f'\n===== 实际操作 Step {step_idx} =====')
     print('8x8棋盘整数数组:')
     print(board)
     print_board_pretty(board)
@@ -262,9 +289,26 @@ def main():
     tx = int(sx + dx * cell_w * 0.8)
     ty = int(sy + dy * cell_h * 0.8)
 
-    print(f'adb swipe: ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dy}, dc={dx})')
-    adb_swipe(sx, sy, tx, ty)
+    dev_w, dev_h = get_device_screen_size()
+    dsx, dsy = map_img_to_device(sx, sy, w, h, dev_w, dev_h)
+    dtx, dty = map_img_to_device(tx, ty, w, h, dev_w, dev_h)
+
+    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dy}, dc={dx})')
+    print(f'adb swipe(dev): ({dsx},{dsy}) -> ({dtx},{dty}) | wm={dev_w}x{dev_h}')
+    adb_swipe(dsx, dsy, dtx, dty)
     print('✅ 已发送 adb 移动命令')
+    return True
+
+
+def main():
+    print('开始实际ADB操作模式（循环执行）')
+    success = 0
+    for i in range(1, MAX_MOVES + 1):
+        ok = run_once(i)
+        if ok:
+            success += 1
+        time.sleep(MOVE_INTERVAL_SEC)
+    print(f'\n完成。共发送 {success}/{MAX_MOVES} 次移动命令。')
 
 
 if __name__ == '__main__':
