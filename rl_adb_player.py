@@ -331,7 +331,8 @@ def run_once(step_idx: int = 0):
 
     er1, ec1 = maybe_swap_rc_for_execution(r1, c1)
     er2, ec2 = maybe_swap_rc_for_execution(r2, c2)
-    print(f'执行坐标模式: {'col,row' if USE_COL_ROW_FOR_EXECUTION else 'row,col'}')
+    exec_mode = 'col,row' if USE_COL_ROW_FOR_EXECUTION else 'row,col'
+    print(f'执行坐标模式: {exec_mode}')
     print(f'执行格子: ({er1},{ec1}) <-> ({er2},{ec2})')
 
     # 空位保护：如果动作落在空位则不执行
