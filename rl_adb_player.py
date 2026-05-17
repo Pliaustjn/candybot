@@ -27,6 +27,8 @@ USE_COL_ROW_FOR_EXECUTION = False  # True: 按(col,row)解释RL输出再执行
 LAST_ACTION = None
 REPEAT_SAME_ACTION = 0
 REPEAT_LIMIT = 2
+TOPK_SCORE_SEARCH = 20
+MIN_SCORE_ACTION = 10
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -162,6 +164,56 @@ def build_action_mask(board: List[List[int]], size: int = GRID_SIZE) -> np.ndarr
         if board_np[r1, c1] == -1 or board_np[r2, c2] == -1:
             mask[a] = 0.0
     return mask
+
+
+def find_matches(board: List[List[int]]) -> List[Tuple[int, int]]:
+    arr = np.array(board, dtype=int)
+    size = arr.shape[0]
+    m = set()
+    for r in range(size):
+        c = 0
+        while c < size - 2:
+            v = arr[r, c]
+            if v == -1:
+                c += 1
+                continue
+            run = 1
+            while c + run < size and arr[r, c + run] == v:
+                run += 1
+            if run >= 3:
+                for k in range(run):
+                    m.add((r, c + k))
+            c += run
+    for c in range(size):
+        r = 0
+        while r < size - 2:
+            v = arr[r, c]
+            if v == -1:
+                r += 1
+                continue
+            run = 1
+            while r + run < size and arr[r + run, c] == v:
+                run += 1
+            if run >= 3:
+                for k in range(run):
+                    m.add((r + k, c))
+            r += run
+    return sorted(m)
+
+
+def estimate_action_score(board: List[List[int]], action: int) -> int:
+    (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
+    b = [row[:] for row in board]
+    b[r1][c1], b[r2][c2] = b[r2][c2], b[r1][c1]
+    matches = find_matches(b)
+    if not matches:
+        return 0
+    score = len(matches) * 10
+    if len(matches) >= 4:
+        score += 50
+    if len(matches) >= 5:
+        score += 100
+    return score
 
 def map_detections_to_8x8(result, img_w: int, img_h: int, x0: int, x1: int, y0: int, y1: int):
     pieces = []
@@ -355,6 +407,24 @@ def run_once(step_idx: int = 0):
         print('⚠️ 动作掩码后无可用动作，回退原始argmax')
     else:
         action = int(np.argmax(masked))
+
+    # 在Top-K合法动作里优先挑可直接得分动作
+    ranked = np.argsort(-masked)
+    best_action = action
+    best_score = estimate_action_score(board, action) if masked[action] > 0 else 0
+    for cand in ranked[:TOPK_SCORE_SEARCH]:
+        cand = int(cand)
+        if masked[cand] <= 0:
+            continue
+        sc = estimate_action_score(board, cand)
+        if sc > best_score:
+            best_score = sc
+            best_action = cand
+    if best_action != action and best_score >= MIN_SCORE_ACTION:
+        print(f'✅ 评分重排: action {action} -> {best_action}, score {best_score}')
+        action = best_action
+    elif best_score <= 0:
+        print('⚠️ 当前Top合法动作都无法直接得分')
 
     rl_mode = 'eval' if not model.training else 'train'
     print(f'RL model mode: {rl_mode} (decision-only)')
