@@ -97,6 +97,31 @@ def save_lines_overlay(image: np.ndarray, x_lines: List[int], y_lines: List[int]
     return path
 
 
+
+def save_detected_region_crop(image: np.ndarray, x_lines: List[int], y_lines: List[int]) -> str:
+    if len(x_lines) < 2 or len(y_lines) < 2:
+        return ''
+
+    x0, x1 = min(x_lines), max(x_lines)
+    y0, y1 = min(y_lines), max(y_lines)
+
+    h, w = image.shape[:2]
+    x0 = max(0, min(w - 1, x0))
+    x1 = max(0, min(w, x1))
+    y0 = max(0, min(h - 1, y0))
+    y1 = max(0, min(h, y1))
+
+    if x1 <= x0 or y1 <= y0:
+        return ''
+
+    crop = image[y0:y1, x0:x1]
+    if crop.size == 0:
+        return ''
+
+    path = 'grid_detected_region.png'
+    cv2.imwrite(path, crop)
+    return path
+
 def main() -> None:
     cap = AdbCapture(PHONE_IP)
     print(f'连接 adb: {PHONE_IP}')
@@ -121,8 +146,14 @@ def main() -> None:
 
     overlay_path = save_lines_overlay(image, x_lines, y_lines)
     cv2.imwrite('grid_hough_edges.png', edges)
+    crop_path = save_detected_region_crop(image, x_lines, y_lines)
+
     print(f'\n✅ 已输出横线+竖线图片: {overlay_path}')
     print('✅ 已输出边缘图: grid_hough_edges.png')
+    if crop_path:
+        print(f'✅ 已输出检测区域裁剪图: {crop_path}')
+    else:
+        print('⚠️ 线条不足，未生成检测区域裁剪图')
 
     if os.path.exists(TEMP_IMAGE):
         os.remove(TEMP_IMAGE)
