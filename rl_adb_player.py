@@ -214,12 +214,18 @@ def main():
     model = ActorCritic(board_size=8, n_channels=7, n_actions=112)
     state_dict = torch.load(RL_MODEL_PATH, map_location='cpu')
     model.load_state_dict(state_dict)
-    model.eval()
 
-    with torch.no_grad():
+    # 强制仅决策模式：关闭训练态 + 冻结参数梯度
+    model.eval()
+    for p in model.parameters():
+        p.requires_grad = False
+    torch.set_grad_enabled(False)
+
+    with torch.inference_mode():
         probs, _ = model(torch.FloatTensor(obs).unsqueeze(0))
         action = int(torch.argmax(probs, dim=1).item())
 
+    print(f'RL model mode: {'eval' if not model.training else 'train'} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
     print(f'RL 动作: {action}, swap ({r1},{c1}) <-> ({r2},{c2})')
 
