@@ -6,6 +6,7 @@ from typing import List, Tuple
 import numpy as np
 from ultralytics import YOLO
 
+
 PHONE_IP = '192.168.2.16:5555'
 WEIGHTS_PATH = 'best.pt'
 CONFIDENCE = 0.25
@@ -43,40 +44,35 @@ class RealtimeBoardDetector:
             return False
 
 
+def _centers_to_indices(values: np.ndarray, grid_size: int) -> np.ndarray:
+    """Map 1D centers to grid indices by rank buckets (robust to board not full-screen)."""
+    order = np.argsort(values)
+    ranks = np.empty_like(order)
+    ranks[order] = np.arange(len(values))
+    # Evenly distribute sorted detections into 0..grid_size-1 buckets.
+    idx = np.floor(ranks * grid_size / max(1, len(values))).astype(int)
+    return np.clip(idx, 0, grid_size - 1)
+
+
 def detections_to_board(
     boxes_xywhn: np.ndarray,
     classes: np.ndarray,
     grid_size: int = GRID_SIZE,
     empty_value: int = EMPTY_VALUE,
 ) -> Tuple[List[List[int]], List[Tuple[int, int, int, int]]]:
-    """Map detections to board using detected-board bbox, not full screenshot."""
+    """Map detections to board by rank-bucketing x/y centers into 9 columns/rows."""
     board = [[empty_value for _ in range(grid_size)] for _ in range(grid_size)]
     conflicts = []
 
     xs = boxes_xywhn[:, 0].astype(float)
     ys = boxes_xywhn[:, 1].astype(float)
-    ws = boxes_xywhn[:, 2].astype(float)
-    hs = boxes_xywhn[:, 3].astype(float)
 
-    pad_x = float(np.median(ws) * 0.5)
-    pad_y = float(np.median(hs) * 0.5)
+    cols = _centers_to_indices(xs, grid_size)
+    rows = _centers_to_indices(ys, grid_size)
 
-    x_min = max(0.0, float(xs.min() - pad_x))
-    x_max = min(1.0, float(xs.max() + pad_x))
-    y_min = max(0.0, float(ys.min() - pad_y))
-    y_max = min(1.0, float(ys.max() + pad_y))
-
-    x_span = max(1e-6, x_max - x_min)
-    y_span = max(1e-6, y_max - y_min)
-
-    for box, cls in zip(boxes_xywhn, classes):
-        x_center, y_center = float(box[0]), float(box[1])
-        x_norm = (x_center - x_min) / x_span
-        y_norm = (y_center - y_min) / y_span
-
-        col = min(grid_size - 1, max(0, int(x_norm * grid_size)))
-        row = min(grid_size - 1, max(0, int(y_norm * grid_size)))
-
+    for row, col, cls in zip(rows, cols, classes):
+        row = int(row)
+        col = int(col)
         cls_int = int(cls)
         if board[row][col] != empty_value:
             conflicts.append((row, col, board[row][col], cls_int))
