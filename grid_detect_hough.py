@@ -8,7 +8,6 @@ import numpy as np
 
 PHONE_IP = '192.168.2.16:5555'
 TEMP_IMAGE = 'temp_screen.png'
-OUTPUT_IMAGE = 'grid_hough_overlay.png'
 GRID_SIZE = 8
 
 CANNY_LOW = 60
@@ -92,27 +91,6 @@ def _fit_to_grid_lines(raw_lines: List[int], size: int, grid_size: int = GRID_SI
     return [int(v) for v in np.linspace(int(size * 0.15), int(size * 0.85), target)]
 
 
-def draw_grid_overlay(image: np.ndarray, x_lines: List[int], y_lines: List[int]) -> np.ndarray:
-    out = image.copy()
-    h, w = out.shape[:2]
-
-    x_grid = _fit_to_grid_lines(x_lines, w, GRID_SIZE)
-    y_grid = _fit_to_grid_lines(y_lines, h, GRID_SIZE)
-
-    for x in x_grid:
-        cv2.line(out, (x, 0), (x, h - 1), (0, 255, 255), 2)
-    for y in y_grid:
-        cv2.line(out, (0, y), (w - 1, y), (0, 255, 255), 2)
-
-    for r in range(GRID_SIZE):
-        for c in range(GRID_SIZE):
-            cx = int((x_grid[c] + x_grid[c + 1]) / 2)
-            cy = int((y_grid[r] + y_grid[r + 1]) / 2)
-            cv2.putText(out, f'{r},{c}', (cx - 18, cy + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
-
-    return out
-
-
 def main() -> None:
     cap = AdbCapture(PHONE_IP)
     print(f'连接 adb: {PHONE_IP}')
@@ -135,11 +113,14 @@ def main() -> None:
     print('\n检测到的候选竖线 x 坐标:', x_lines)
     print('检测到的候选横线 y 坐标:', y_lines)
 
-    overlay = draw_grid_overlay(image, x_lines, y_lines)
-    cv2.imwrite(OUTPUT_IMAGE, overlay)
+    x_grid = _fit_to_grid_lines(x_lines, image.shape[1], GRID_SIZE)
+    y_grid = _fit_to_grid_lines(y_lines, image.shape[0], GRID_SIZE)
+
+    print('\n推断后的竖向网格线 x_grid:', x_grid)
+    print('推断后的横向网格线 y_grid:', y_grid)
+
     cv2.imwrite('grid_hough_edges.png', edges)
-    print(f'\n✅ 已输出网格叠图: {OUTPUT_IMAGE}')
-    print('✅ 已输出边缘图: grid_hough_edges.png')
+    print('\n✅ 已输出边缘图: grid_hough_edges.png')
 
     if os.path.exists(TEMP_IMAGE):
         os.remove(TEMP_IMAGE)
