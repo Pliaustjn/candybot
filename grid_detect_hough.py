@@ -91,6 +91,20 @@ def _fit_to_grid_lines(raw_lines: List[int], size: int, grid_size: int = GRID_SI
     return [int(v) for v in np.linspace(int(size * 0.15), int(size * 0.85), target)]
 
 
+def save_lines_overlay(image: np.ndarray, x_lines: List[int], y_lines: List[int]) -> str:
+    out = image.copy()
+    h, w = out.shape[:2]
+
+    for x in x_lines:
+        cv2.line(out, (x, 0), (x, h - 1), (0, 255, 255), 2)
+    for y in y_lines:
+        cv2.line(out, (0, y), (w - 1, y), (0, 255, 0), 2)
+
+    path = 'grid_detected_lines.png'
+    cv2.imwrite(path, out)
+    return path
+
+
 def main() -> None:
     cap = AdbCapture(PHONE_IP)
     print(f'连接 adb: {PHONE_IP}')
@@ -119,8 +133,10 @@ def main() -> None:
     print('\n推断后的竖向网格线 x_grid:', x_grid)
     print('推断后的横向网格线 y_grid:', y_grid)
 
+    overlay_path = save_lines_overlay(image, x_grid, y_grid)
     cv2.imwrite('grid_hough_edges.png', edges)
-    print('\n✅ 已输出边缘图: grid_hough_edges.png')
+    print(f'\n✅ 已输出横线+竖线图片: {overlay_path}')
+    print('✅ 已输出边缘图: grid_hough_edges.png')
 
     if os.path.exists(TEMP_IMAGE):
         os.remove(TEMP_IMAGE)
