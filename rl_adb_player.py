@@ -20,6 +20,8 @@ CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 
 # adb 滑动时长（毫秒）
 SWIPE_MS = 120
+MOVE_INTERVAL_SEC = 0.8
+MAX_MOVES = 30
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -179,7 +181,7 @@ def adb_swipe(x1, y1, x2, y2):
     subprocess.run(['adb', 'shell', 'input', 'swipe', str(x1), str(y1), str(x2), str(y2), str(SWIPE_MS)], check=False)
 
 
-def main():
+def run_once(step_idx: int = 0):
     if not os.path.exists(WEIGHTS_PATH) or not os.path.exists(RL_MODEL_PATH):
         print('❌ 缺少 best.pt 或 candy_crush_model.pth')
         return
@@ -213,6 +215,7 @@ def main():
     print(f"YOLO model mode: {'eval' if hasattr(yolo, 'model') and (not yolo.model.training) else 'train'} (inference-only)")
     pieces = map_detections_to_8x8(results[0], w, h, x0, x1, y0, y1)
     board = build_board_array(pieces, -1)
+    print(f'\n===== 实际操作 Step {step_idx} =====')
     print('8x8棋盘整数数组:')
     print(board)
 
@@ -242,9 +245,22 @@ def main():
 
     sx, sy = cell_center(x0, x1, y0, y1, r1, c1)
     tx, ty = cell_center(x0, x1, y0, y1, r2, c2)
-    print(f'adb swipe: ({sx},{sy}) -> ({tx},{ty})')
+    cmd_preview = f"adb shell input swipe {sx} {sy} {tx} {ty} {SWIPE_MS}"
+    print(f'adb命令: {cmd_preview}')
     adb_swipe(sx, sy, tx, ty)
     print('✅ 已发送 adb 移动命令')
+    return True
+
+
+def main():
+    print('开始实际ADB操作模式（非训练演示）')
+    success = 0
+    for i in range(1, MAX_MOVES + 1):
+        ok = run_once(i)
+        if ok:
+            success += 1
+        time.sleep(MOVE_INTERVAL_SEC)
+    print(f'\n完成。共发送 {success}/{MAX_MOVES} 次移动命令。')
 
 
 if __name__ == '__main__':
