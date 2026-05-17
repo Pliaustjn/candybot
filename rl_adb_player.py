@@ -253,8 +253,16 @@ def main():
         return
 
     sx, sy = cell_center(x0, x1, y0, y1, r1, c1)
-    tx, ty = cell_center(x0, x1, y0, y1, r2, c2)
-    print(f'adb swipe: ({sx},{sy}) -> ({tx},{ty})')
+
+    # 关键修复：按“动作方向”构造终点，避免由于网格拟合误差导致方向跑偏
+    cell_w = max(1.0, (x1 - x0) / GRID_SIZE)
+    cell_h = max(1.0, (y1 - y0) / GRID_SIZE)
+    dx = c2 - c1
+    dy = r2 - r1
+    tx = int(sx + dx * cell_w * 0.8)
+    ty = int(sy + dy * cell_h * 0.8)
+
+    print(f'adb swipe: ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dy}, dc={dx})')
     adb_swipe(sx, sy, tx, ty)
     print('✅ 已发送 adb 移动命令')
 
