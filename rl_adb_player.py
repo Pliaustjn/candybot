@@ -200,6 +200,23 @@ def cell_center(x0, x1, y0, y1, row, col):
 
 
 
+
+def align_endpoint_by_action(sx: int, sy: int, tx: int, ty: int, dr: int, dc: int) -> Tuple[int, int]:
+    """Force endpoint to follow decoded action axis and sign exactly."""
+    if dr != 0 and dc == 0:
+        tx = sx
+        if dr > 0 and ty < sy:
+            ty = sy + abs(ty - sy)
+        elif dr < 0 and ty > sy:
+            ty = sy - abs(ty - sy)
+    elif dc != 0 and dr == 0:
+        ty = sy
+        if dc > 0 and tx < sx:
+            tx = sx + abs(tx - sx)
+        elif dc < 0 and tx > sx:
+            tx = sx - abs(tx - sx)
+    return tx, ty
+
 def save_action_visualization(image: np.ndarray, sx: int, sy: int, tx: int, ty: int, path: str = ACTION_VIS_PATH) -> str:
     vis = image.copy()
     cv2.arrowedLine(vis, (sx, sy), (tx, ty), (0, 0, 255), 4, tipLength=0.2)
@@ -319,18 +336,16 @@ def run_once(step_idx: int = 0):
         tx = int(sx + dx * cell_w * 0.8)
         ty = int(sy + dy * cell_h * 0.8)
 
-    # 关键修复：垂直/水平动作强制轴对齐，避免轻微斜线被游戏识别成错误方向
     dr, dc = (r2 - r1), (c2 - c1)
-    if dr != 0 and dc == 0:
-        tx = sx
-    elif dc != 0 and dr == 0:
-        ty = sy
+    tx, ty = align_endpoint_by_action(sx, sy, tx, ty, dr, dc)
 
     dev_w, dev_h = get_device_screen_size()
     dsx, dsy = map_img_to_device(sx, sy, w, h, dev_w, dev_h)
     dtx, dty = map_img_to_device(tx, ty, w, h, dev_w, dev_h)
 
-    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dr}, dc={dc})')
+    actual_dr = 'down' if ty > sy else ('up' if ty < sy else 'none')
+    actual_dc = 'right' if tx > sx else ('left' if tx < sx else 'none')
+    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | decoded=(dr={dr},dc={dc}) actual=({actual_dr},{actual_dc})')
     print(f'adb swipe(dev): ({dsx},{dsy}) -> ({dtx},{dty}) | wm={dev_w}x{dev_h}')
     vis_path = save_action_visualization(image, sx, sy, tx, ty, ACTION_VIS_PATH)
     print(f'动作可视化图: {vis_path}')
