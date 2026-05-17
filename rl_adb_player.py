@@ -22,6 +22,7 @@ CLASS_NAMES = ['red', 'blue', 'green', 'purple', 'orange', 'yellow']
 SWIPE_MS = 120
 MOVE_INTERVAL_SEC = 0.8
 MAX_MOVES = 30
+TOTAL_REALTIME_SCORE = 0
 
 CANNY_LOW = 60
 CANNY_HIGH = 180
@@ -248,6 +249,7 @@ def adb_swipe(x1, y1, x2, y2):
 
 
 def run_once(step_idx: int = 0):
+    global TOTAL_REALTIME_SCORE
     if not os.path.exists(WEIGHTS_PATH) or not os.path.exists(RL_MODEL_PATH):
         print('❌ 缺少 best.pt 或 candy_crush_model.pth')
         return
@@ -308,10 +310,12 @@ def run_once(step_idx: int = 0):
 
     est_score, matched_cells = estimate_move_benefit(board, (r1, c1), (r2, c2))
     if matched_cells:
-        print(f'预估有利影响: 形成消除 {len(matched_cells)} 格, 预估得分 +{est_score}')
-        print(f'消除位置: {matched_cells}')
+        TOTAL_REALTIME_SCORE += est_score
+        print(f'实时评分: 本步 +{est_score} 分, 累计 {TOTAL_REALTIME_SCORE} 分')
+        print(f'形成消除 {len(matched_cells)} 格, 消除位置: {matched_cells}')
     else:
-        print('预估有利影响: 本步不会直接形成3连，预估得分 +0')
+        print(f'实时评分: 本步 +0 分, 累计 {TOTAL_REALTIME_SCORE} 分')
+        print('本步不会直接形成3连')
 
     # 空位保护：如果动作落在空位则不执行
     if board[r1][c1] == -1 or board[r2][c2] == -1:
@@ -336,6 +340,7 @@ def main():
             success += 1
         time.sleep(MOVE_INTERVAL_SEC)
     print(f'\n完成。共发送 {success}/{MAX_MOVES} 次移动命令。')
+    print(f'实时累计得分: {TOTAL_REALTIME_SCORE}')
 
 
 if __name__ == '__main__':
