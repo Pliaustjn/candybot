@@ -201,6 +201,11 @@ def cell_center(x0, x1, y0, y1, row, col):
 
 
 
+
+def rc_to_xy(r: int, c: int) -> Tuple[int, int]:
+    """Convert internal (row,col) to user-facing (x,y)."""
+    return c, r
+
 def align_endpoint_by_action(sx: int, sy: int, tx: int, ty: int, dr: int, dc: int) -> Tuple[int, int]:
     """Force endpoint to follow decoded action axis and sign exactly."""
     if dr != 0 and dc == 0:
@@ -312,7 +317,9 @@ def run_once(step_idx: int = 0):
     rl_mode = 'eval' if not model.training else 'train'
     print(f'RL model mode: {rl_mode} (decision-only)')
     (r1, c1), (r2, c2) = decode_action(action, GRID_SIZE)
-    print(f'RL 动作: {action}, swap ({r1},{c1}) <-> ({r2},{c2})')
+    x1g, y1g = rc_to_xy(r1, c1)
+    x2g, y2g = rc_to_xy(r2, c2)
+    print(f'RL 动作: {action}, swap (x={x1g}, y={y1g}) <-> (x={x2g}, y={y2g})')
 
     # 空位保护：如果动作落在空位则不执行
     if board[r1][c1] == -1 or board[r2][c2] == -1:
@@ -345,7 +352,7 @@ def run_once(step_idx: int = 0):
 
     actual_dr = 'down' if ty > sy else ('up' if ty < sy else 'none')
     actual_dc = 'right' if tx > sx else ('left' if tx < sx else 'none')
-    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | decoded=(dr={dr},dc={dc}) actual=({actual_dr},{actual_dc})')
+    print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | decoded=(dx={dc},dy={dr}) actual=({actual_dc},{actual_dr})')
     print(f'adb swipe(dev): ({dsx},{dsy}) -> ({dtx},{dty}) | wm={dev_w}x{dev_h}')
     vis_path = save_action_visualization(image, sx, sy, tx, ty, ACTION_VIS_PATH)
     print(f'动作可视化图: {vis_path}')
