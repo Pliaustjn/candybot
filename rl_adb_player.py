@@ -307,11 +307,17 @@ def run_once(step_idx: int = 0):
         tx = int(sx + dx * cell_w * 0.8)
         ty = int(sy + dy * cell_h * 0.8)
 
+    # 关键修复：垂直/水平动作强制轴对齐，避免轻微斜线被游戏识别成错误方向
+    dr, dc = (r2 - r1), (c2 - c1)
+    if dr != 0 and dc == 0:
+        tx = sx
+    elif dc != 0 and dr == 0:
+        ty = sy
+
     dev_w, dev_h = get_device_screen_size()
     dsx, dsy = map_img_to_device(sx, sy, w, h, dev_w, dev_h)
     dtx, dty = map_img_to_device(tx, ty, w, h, dev_w, dev_h)
 
-    dr, dc = (r2 - r1), (c2 - c1)
     print(f'adb swipe(img): ({sx},{sy}) -> ({tx},{ty}) | dir=(dr={dr}, dc={dc})')
     print(f'adb swipe(dev): ({dsx},{dsy}) -> ({dtx},{dty}) | wm={dev_w}x{dev_h}')
     adb_swipe(dsx, dsy, dtx, dty)
